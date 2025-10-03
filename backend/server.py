@@ -1137,7 +1137,11 @@ async def checkout(payment_method: Dict[str, str], current_user: User = Depends(
 @api_router.post("/payment/{payment_id}/simulate")
 async def simulate_payment(payment_id: str, current_user: User = Depends(get_current_user)):
     """Start payment simulation - will auto-succeed after 3 minutes"""
-    payment = await Payment.get(payment_id)
+    try:
+        payment = await Payment.get(payment_id)
+    except Exception:
+        # Invalid ObjectId format or other errors
+        raise HTTPException(status_code=404, detail="Payment not found")
     
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
