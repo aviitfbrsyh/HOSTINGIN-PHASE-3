@@ -312,10 +312,10 @@ export default function Packages() {
                 </Button>
                 <Button
                   className="flex-1 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700"
-                  onClick={handleOrder}
+                  onClick={handleAddToCart}
                   disabled={ordering}
                 >
-                  {ordering ? 'Creating...' : 'Create Order'}
+                  {ordering ? 'Adding...' : 'Add to Cart'}
                 </Button>
               </div>
             </div>
