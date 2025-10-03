@@ -812,8 +812,30 @@ async def pay_order(order_id: str, payment_data: PaymentSimulate, current_user: 
         payment.status = "success"
         order.status = "paid"
         order.expires_at = datetime.now(timezone.utc) + timedelta(days=30 * order.period_months)
+        
+        # Create notification for successful payment
+        notification = Notification(
+            user_id=current_user.id,
+            title="💳 Payment Success!",
+            message=f"Pembayaran Rp {order.price_cents:,} berhasil! Domain {order.domain} telah aktif.",
+            type="billing",
+            category="payment",
+            is_read=False
+        )
+        await notification.insert()
     else:
         payment.status = "failed"
+        
+        # Create notification for failed payment
+        notification = Notification(
+            user_id=current_user.id,
+            title="❌ Payment Failed",
+            message=f"Pembayaran untuk order {order.domain} gagal. Silakan coba lagi.",
+            type="billing",
+            category="payment",
+            is_read=False
+        )
+        await notification.insert()
     
     await payment.save()
     await order.save()
@@ -828,6 +850,7 @@ async def pay_order(order_id: str, payment_data: PaymentSimulate, current_user: 
             "id": str(order.id),
             "status": order.status
         }
+    }
     }
 
 @api_router.post("/orders/{order_id}/renew")
