@@ -1,0 +1,15 @@
+[Unit]
+Description=HostingIn Application
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/path/to/hostingin
+ExecStart=/usr/bin/docker-compose -f deploy/docker-compose.prod.yml up -d
+ExecStop=/usr/bin/docker-compose -f deploy/docker-compose.prod.yml down
+ExecReload=/usr/bin/docker-compose -f deploy/docker-compose.prod.yml restart
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: hostingin-mongodb-prod
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: hostingin_db
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - hostingin-network
+    # Only expose internally
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hostingin-backend-prod
+    restart: always
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=hostingin_db
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_MINUTES=1440
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://yourdomain.com}
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      - mongodb
+    networks:
+      - hostingin-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/packages"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_BACKEND_URL=${BACKEND_URL:-https://yourdomain.com}
+    container_name: hostingin-frontend-prod
+    restart: always
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - hostingin-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  hostingin-network:
+    driver: bridge
