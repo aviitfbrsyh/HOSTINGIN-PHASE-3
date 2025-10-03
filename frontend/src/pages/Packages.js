@@ -55,7 +55,7 @@ export default function Packages() {
     setOrderDialogOpen(true);
   };
 
-  const handleOrder = async () => {
+  const handleAddToCart = async () => {
     if (!domain.trim()) {
       toast.error('Please enter a domain name');
       return;
@@ -63,20 +63,35 @@ export default function Packages() {
 
     setOrdering(true);
     try {
-      const result = await request('POST', '/orders', {
+      // Add hosting package to cart
+      await request('POST', '/cart/add', {
+        type: 'hosting',
+        name: selectedPackage.title,
+        slug: selectedPackage.slug,
         package_id: selectedPackage.id,
-        domain: domain.trim(),
-        period_months: isAnnual ? 12 : 1
+        price_cents: calculatePrice(selectedPackage.price_cents),
+        description: `${isAnnual ? 'Annual' : 'Monthly'} hosting plan`,
+        period: isAnnual ? 'yearly' : 'monthly'
       });
       
-      toast.success('Order created successfully!');
+      // Add domain to cart (user will need to check availability first)
+      // For now, we'll add it as a dummy item
+      await request('POST', '/cart/add', {
+        type: 'domain',
+        name: domain.trim(),
+        tld: domain.includes('.') ? domain.substring(domain.lastIndexOf('.')) : '.com',
+        price_cents: 150000, // Default .com price
+        description: 'Domain registration (1 year)'
+      });
+      
+      toast.success('Added to cart! Review your order.');
       setOrderDialogOpen(false);
       setDomain('');
       
-      // Navigate to orders page
-      navigate('/dashboard/orders');
+      // Navigate to cart page
+      navigate('/dashboard/cart');
     } catch (error) {
-      toast.error(error.message || 'Failed to create order');
+      toast.error(error.message || 'Failed to add to cart');
     } finally {
       setOrdering(false);
     }
