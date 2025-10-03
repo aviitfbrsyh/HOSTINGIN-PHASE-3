@@ -359,7 +359,8 @@ async def startup_event():
         database=client[db_name],
         document_models=[
             User, Package, Order, Payment, Ticket, 
-            Announcement, Promo, Affiliate, ActivityLog, KnowledgeArticle
+            Announcement, Promo, Affiliate, ActivityLog, KnowledgeArticle,
+            Cart, Notification
         ]
     )
     logger.info("Database initialized")
