@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home, Package, ShoppingCart, CreditCard, HelpCircle, Settings,
   User, LogOut, Bell, Menu, X, Server, Sun, Moon, Users, BarChart3,
-  MessageSquare, Megaphone, FileText, Briefcase, Wrench
+  MessageSquare, Megaphone, FileText, Briefcase, Wrench, History, Gift
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
@@ -19,6 +19,8 @@ import {
 import { Badge } from './ui/badge';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import NotificationDropdown from './NotificationDropdown';
+import AISupportChat from './AISupportChat';
 
 export default function DashboardLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
