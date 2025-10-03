@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { 
   FolderOpen, File, Download, Upload, Trash2, Plus,
   Shield, Mail, Database, Terminal, Lock, CheckCircle,
-  AlertCircle, ChevronRight, Search, FileText, Image as ImageIcon
+  AlertCircle, ChevronRight, Search, FileText, Image as ImageIcon,
+  Globe
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -14,6 +15,8 @@ import { Switch } from '../components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import DashboardLayout from '../components/DashboardLayout';
+import DomainChecker from '../components/DomainChecker';
+import { useApi } from '../hooks/useApi';
 import { toast } from 'sonner';
 
 export default function Tools() {
