@@ -514,6 +514,50 @@ async def startup_event():
             article = KnowledgeArticle(**article_data)
             await article.insert()
         
+        # Create sample notifications for test user
+        sample_notifications = [
+            {
+                "user_id": test_user.id,
+                "title": "🎉 Welcome to HostingIn!",
+                "message": "Selamat datang di HostingIn! Nikmati hosting premium dengan harga terjangkau.",
+                "type": "system",
+                "category": "system",
+                "is_read": False
+            },
+            {
+                "user_id": test_user.id,
+                "title": "💳 Payment Reminder",
+                "message": "Jangan lupa untuk menyelesaikan pembayaran order Anda.",
+                "type": "billing",
+                "category": "payment",
+                "is_read": False
+            },
+            {
+                "user_id": test_user.id,
+                "title": "🎁 Special Promo - 50% OFF!",
+                "message": "Gunakan kode PROMO50 untuk diskon 50% pada order selanjutnya!",
+                "type": "announcement",
+                "category": "promo",
+                "is_read": False
+            }
+        ]
+        
+        for notif_data in sample_notifications:
+            notif = Notification(**notif_data)
+            await notif.insert()
+        
+        # Create referral for test user
+        referral_code = f"REF{str(test_user.id)[:8].upper()}"
+        test_referral = Referral(
+            user_id=test_user.id,
+            code=referral_code,
+            clicks=15,
+            signups=5,
+            conversions=2,
+            rewards_earned_cents=10000
+        )
+        await test_referral.insert()
+        
         logger.info("Seeding completed!")
 
 @app.on_event("shutdown")
