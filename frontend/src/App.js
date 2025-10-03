@@ -25,6 +25,8 @@ import AdminPackages from './pages/AdminPackages';
 import AdminUsers from './pages/AdminUsers';
 import AdminAnnouncements from './pages/AdminAnnouncements';
 import AdminLogs from './pages/AdminLogs';
+import AdminSupport from './pages/AdminSupport';
+import AdminBroadcast from './pages/AdminBroadcast';
 import '@/App.css';
 
 // Protected Route Component
