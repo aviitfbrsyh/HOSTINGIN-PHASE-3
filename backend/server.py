@@ -870,7 +870,6 @@ async def pay_order(order_id: str, payment_data: PaymentSimulate, current_user: 
             "status": order.status
         }
     }
-    }
 
 @api_router.post("/orders/{order_id}/renew")
 async def renew_order(order_id: str, current_user: User = Depends(get_current_user)):
