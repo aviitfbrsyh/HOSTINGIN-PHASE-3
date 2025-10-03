@@ -194,6 +194,9 @@ export default function DashboardLayout({ children }) {
           {children}
         </main>
       </div>
+      
+      {/* AI Support Chat - Only show for regular users */}
+      {user?.role !== 'admin' && <AISupportChat />}
     </div>
   );
 }
