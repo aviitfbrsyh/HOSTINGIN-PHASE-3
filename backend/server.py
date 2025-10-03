@@ -713,6 +713,17 @@ async def create_order(order_data: OrderCreate, current_user: User = Depends(get
     )
     await order.insert()
     
+    # Create notification for order creation
+    notification = Notification(
+        user_id=current_user.id,
+        title="📦 Order Created",
+        message=f"Order untuk domain {order_data.domain} telah dibuat. Silakan lanjutkan pembayaran.",
+        type="order",
+        category="system",
+        is_read=False
+    )
+    await notification.insert()
+    
     return {
         "message": "Order created",
         "order": {
