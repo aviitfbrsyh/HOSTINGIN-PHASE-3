@@ -582,6 +582,25 @@ async def register(user_data: UserRegister):
     )
     await user.insert()
     
+    # Auto-create referral code for new user
+    referral_code = f"REF{str(user.id)[:8].upper()}"
+    referral = Referral(
+        user_id=user.id,
+        code=referral_code
+    )
+    await referral.insert()
+    
+    # Create welcome notification
+    welcome_notification = Notification(
+        user_id=user.id,
+        title="🎉 Welcome to HostingIn!",
+        message=f"Selamat datang {user.name}! Nikmati hosting premium dengan harga terjangkau. Jangan lupa cek link referral Anda untuk dapat reward!",
+        type="system",
+        category="system",
+        is_read=False
+    )
+    await welcome_notification.insert()
+    
     # Generate token
     access_token = create_access_token(data={"sub": user.email})
     
