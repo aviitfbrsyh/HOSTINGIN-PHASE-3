@@ -1164,7 +1164,11 @@ async def simulate_payment(payment_id: str, current_user: User = Depends(get_cur
 @api_router.get("/payment/{payment_id}/status")
 async def get_payment_status(payment_id: str, current_user: User = Depends(get_current_user)):
     """Check payment status"""
-    payment = await Payment.get(payment_id)
+    try:
+        payment = await Payment.get(payment_id)
+    except Exception:
+        # Invalid ObjectId format or other errors
+        raise HTTPException(status_code=404, detail="Payment not found")
     
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
