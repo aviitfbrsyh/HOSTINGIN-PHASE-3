@@ -970,6 +970,366 @@ async def get_announcements():
         for a in announcements
     ]
 
+# ==================== CART ROUTES ====================
+
+@api_router.get("/cart")
+async def get_cart(current_user: User = Depends(get_current_user)):
+    """Get user's cart"""
+    cart = await Cart.find_one(Cart.user_id == current_user.id, Cart.status == "open")
+    
+    if not cart:
+        # Create new cart if doesn't exist
+        cart = Cart(user_id=current_user.id, items=[], total_cents=0)
+        await cart.insert()
+    
+    return {
+        "id": str(cart.id),
+        "items": cart.items,
+        "total_cents": cart.total_cents,
+        "status": cart.status
+    }
+
+@api_router.post("/cart/add")
+async def add_to_cart(item: Dict[str, Any], current_user: User = Depends(get_current_user)):
+    """Add item to cart (domain, hosting, or addon)"""
+    cart = await Cart.find_one(Cart.user_id == current_user.id, Cart.status == "open")
+    
+    if not cart:
+        cart = Cart(user_id=current_user.id, items=[], total_cents=0)
+        await cart.insert()
+    
+    # Add item to cart
+    cart.items.append(item)
+    
+    # Recalculate total
+    cart.total_cents = sum(i.get("price_cents", 0) for i in cart.items)
+    cart.updated_at = datetime.now(timezone.utc)
+    
+    await cart.save()
+    
+    return {
+        "id": str(cart.id),
+        "items": cart.items,
+        "total_cents": cart.total_cents,
+        "message": f"{item.get('name', 'Item')} added to cart"
+    }
+
+@api_router.delete("/cart/remove/{item_index}")
+async def remove_from_cart(item_index: int, current_user: User = Depends(get_current_user)):
+    """Remove item from cart by index"""
+    cart = await Cart.find_one(Cart.user_id == current_user.id, Cart.status == "open")
+    
+    if not cart:
+        raise HTTPException(status_code=404, detail="Cart not found")
+    
+    if item_index < 0 or item_index >= len(cart.items):
+        raise HTTPException(status_code=400, detail="Invalid item index")
+    
+    removed_item = cart.items.pop(item_index)
+    cart.total_cents = sum(i.get("price_cents", 0) for i in cart.items)
+    cart.updated_at = datetime.now(timezone.utc)
+    
+    await cart.save()
+    
+    return {
+        "message": f"{removed_item.get('name', 'Item')} removed from cart",
+        "items": cart.items,
+        "total_cents": cart.total_cents
+    }
+
+@api_router.delete("/cart/clear")
+async def clear_cart(current_user: User = Depends(get_current_user)):
+    """Clear all items from cart"""
+    cart = await Cart.find_one(Cart.user_id == current_user.id, Cart.status == "open")
+    
+    if cart:
+        cart.items = []
+        cart.total_cents = 0
+        cart.updated_at = datetime.now(timezone.utc)
+        await cart.save()
+    
+    return {"message": "Cart cleared"}
+
+# ==================== CHECKOUT & PAYMENT ROUTES ====================
+
+@api_router.post("/checkout")
+async def checkout(payment_method: Dict[str, str], current_user: User = Depends(get_current_user)):
+    """Checkout cart and create order with payment"""
+    cart = await Cart.find_one(Cart.user_id == current_user.id, Cart.status == "open")
+    
+    if not cart or len(cart.items) == 0:
+        raise HTTPException(status_code=400, detail="Cart is empty")
+    
+    # Extract domain and services from cart
+    domain = None
+    services = []
+    package_id = None
+    
+    for item in cart.items:
+        if item.get("type") == "domain":
+            domain = item.get("name")
+        elif item.get("type") == "hosting":
+            package_id = item.get("package_id")
+            services.append(item.get("slug", "hosting"))
+        elif item.get("type") == "addon":
+            services.append(item.get("slug"))
+    
+    if not domain:
+        raise HTTPException(status_code=400, detail="Domain is required")
+    
+    # Create order
+    order = Order(
+        user_id=current_user.id,
+        package_id=PydanticObjectId(package_id) if package_id else None,
+        domain=domain,
+        period_months=12,  # Default 1 year
+        price_cents=cart.total_cents,
+        status="inactive"  # Start as inactive until payment
+    )
+    await order.insert()
+    
+    # Create payment record
+    payment = Payment(
+        order_id=order.id,
+        amount_cents=cart.total_cents,
+        method=payment_method.get("method", "unknown"),
+        status="pending",
+        payload={
+            "services": services,
+            "payment_details": payment_method,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+    )
+    await payment.insert()
+    
+    # Mark cart as checked out
+    cart.status = "checked_out"
+    await cart.save()
+    
+    # Create notification
+    notification = Notification(
+        user_id=current_user.id,
+        title="Order Created",
+        message=f"Order for {domain} has been created. Please complete payment.",
+        type="order"
+    )
+    await notification.insert()
+    
+    # Generate payment reference based on method
+    payment_reference = None
+    if "VA" in payment_method.get("method", ""):
+        # Virtual Account number
+        bank_code = payment_method.get("method", "VA").split("-")[-1]
+        payment_reference = f"{bank_code[:3].upper()}{str(order.id)[-9:]}"
+    elif "QRIS" in payment_method.get("method", ""):
+        payment_reference = f"QRIS-{str(order.id)[-12:]}"
+    
+    return {
+        "order_id": str(order.id),
+        "payment_id": str(payment.id),
+        "amount_cents": cart.total_cents,
+        "method": payment_method.get("method"),
+        "payment_reference": payment_reference,
+        "status": "pending",
+        "expires_in_seconds": 900  # 15 minutes
+    }
+
+@api_router.post("/payment/{payment_id}/simulate")
+async def simulate_payment(payment_id: str, current_user: User = Depends(get_current_user)):
+    """Start payment simulation - will auto-succeed after 3 minutes"""
+    payment = await Payment.get(payment_id)
+    
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    
+    order = await Order.get(payment.order_id)
+    
+    if not order or order.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    # Update order status to pending (waiting for payment)
+    order.status = "pending"
+    await order.save()
+    
+    # Payment status will be updated by background job after 3 minutes
+    # For now, return pending status
+    
+    return {
+        "payment_id": str(payment.id),
+        "order_id": str(order.id),
+        "status": "pending",
+        "message": "Payment is being processed. It will be automatically confirmed in ~3 minutes."
+    }
+
+@api_router.get("/payment/{payment_id}/status")
+async def get_payment_status(payment_id: str, current_user: User = Depends(get_current_user)):
+    """Check payment status"""
+    payment = await Payment.get(payment_id)
+    
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    
+    order = await Order.get(payment.order_id)
+    
+    if not order or order.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    # Auto-update payment status based on time (simulation)
+    created_at = payment.created_at
+    now = datetime.now(timezone.utc)
+    elapsed_seconds = (now - created_at).total_seconds()
+    
+    if payment.status == "pending":
+        if elapsed_seconds >= 180:  # 3 minutes
+            # Auto success
+            payment.status = "success"
+            await payment.save()
+            
+            order.status = "paid"
+            order.expires_at = now + timedelta(days=365)  # 1 year from now
+            await order.save()
+            
+            # Create notification
+            notification = Notification(
+                user_id=current_user.id,
+                title="Payment Successful",
+                message=f"Payment for {order.domain} has been completed. Your service is now active!",
+                type="billing"
+            )
+            await notification.insert()
+            
+            # Update order to active after payment
+            order.status = "active"
+            await order.save()
+            
+        elif elapsed_seconds >= 900:  # 15 minutes
+            # Auto cancel
+            payment.status = "failed"
+            await payment.save()
+            
+            order.status = "cancelled"
+            await order.save()
+            
+            notification = Notification(
+                user_id=current_user.id,
+                title="Payment Cancelled",
+                message=f"Payment for {order.domain} has been cancelled due to timeout.",
+                type="billing"
+            )
+            await notification.insert()
+    
+    return {
+        "payment_id": str(payment.id),
+        "order_id": str(order.id),
+        "payment_status": payment.status,
+        "order_status": order.status,
+        "elapsed_seconds": int(elapsed_seconds),
+        "expires_in_seconds": max(0, 900 - int(elapsed_seconds))
+    }
+
+# ==================== MY SERVICES ROUTES ====================
+
+@api_router.get("/services/my")
+async def get_my_services(current_user: User = Depends(get_current_user)):
+    """Get all user's active services"""
+    orders = await Order.find(Order.user_id == current_user.id).to_list()
+    
+    services = []
+    for order in orders:
+        package = await Package.get(order.package_id) if order.package_id else None
+        
+        services.append({
+            "id": str(order.id),
+            "domain": order.domain,
+            "package": package.title if package else "Custom",
+            "status": order.status,
+            "created_at": order.created_at.isoformat(),
+            "expires_at": order.expires_at.isoformat() if order.expires_at else None,
+            "price_cents": order.price_cents,
+            "period_months": order.period_months
+        })
+    
+    return services
+
+@api_router.post("/services/{order_id}/renew")
+async def renew_service(order_id: str, current_user: User = Depends(get_current_user)):
+    """Renew a service - extends expiry by 1 year"""
+    order = await Order.get(order_id)
+    
+    if not order or order.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Extend expiry date by 1 year
+    if order.expires_at:
+        order.expires_at = order.expires_at + timedelta(days=365)
+    else:
+        order.expires_at = datetime.now(timezone.utc) + timedelta(days=365)
+    
+    order.status = "active"
+    await order.save()
+    
+    # Create notification
+    notification = Notification(
+        user_id=current_user.id,
+        title="Service Renewed",
+        message=f"Your service for {order.domain} has been renewed for 1 year.",
+        type="order"
+    )
+    await notification.insert()
+    
+    return {
+        "message": "Service renewed successfully",
+        "expires_at": order.expires_at.isoformat()
+    }
+
+# ==================== NOTIFICATION ROUTES ====================
+
+@api_router.get("/notifications")
+async def get_notifications(current_user: User = Depends(get_current_user)):
+    """Get user notifications"""
+    notifications = await Notification.find(
+        Notification.user_id == current_user.id
+    ).sort(-Notification.created_at).to_list(50)
+    
+    return [
+        {
+            "id": str(n.id),
+            "title": n.title,
+            "message": n.message,
+            "type": n.type,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat()
+        }
+        for n in notifications
+    ]
+
+@api_router.patch("/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, current_user: User = Depends(get_current_user)):
+    """Mark notification as read"""
+    notification = await Notification.get(notification_id)
+    
+    if not notification or notification.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    notification.is_read = True
+    await notification.save()
+    
+    return {"message": "Notification marked as read"}
+
+@api_router.post("/notifications/read-all")
+async def mark_all_read(current_user: User = Depends(get_current_user)):
+    """Mark all notifications as read"""
+    notifications = await Notification.find(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False
+    ).to_list()
+    
+    for n in notifications:
+        n.is_read = True
+        await n.save()
+    
+    return {"message": f"{len(notifications)} notifications marked as read"}
+
 # ==================== INCLUDE ROUTER ====================
 
 app.include_router(api_router)
