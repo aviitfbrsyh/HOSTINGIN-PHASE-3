@@ -163,6 +163,32 @@ class KnowledgeArticle(Document):
     class Settings:
         name = "knowledge_articles"
 
+class Cart(Document):
+    user_id: PydanticObjectId
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+    total_cents: int = 0
+    status: str = "open"  # open, checked_out
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    class Settings:
+        name = "carts"
+
+class Notification(Document):
+    user_id: PydanticObjectId
+    title: str
+    message: str
+    type: str = "system"  # system, order, billing, announcement
+    is_read: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    class Settings:
+        name = "notifications"
+
 # ==================== PYDANTIC SCHEMAS ====================
 
 class UserRegister(BaseModel):
