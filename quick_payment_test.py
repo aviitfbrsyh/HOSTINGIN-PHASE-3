@@ -6,7 +6,7 @@ Quick test for payment status endpoint fix
 import requests
 import json
 
-BASE_URL = "https://domaincart.preview.emergentagent.com/api"
+BASE_URL = "https://webcontrols-ai.preview.emergentagent.com/api"
 TEST_USER = {"email": "test@hostingin.com", "password": "password123"}
 
 def test_payment_status():

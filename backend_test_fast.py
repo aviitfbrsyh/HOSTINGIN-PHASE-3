@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import sys
 
 # Configuration
-BASE_URL = "https://domaincart.preview.emergentagent.com/api"
+BASE_URL = "https://webcontrols-ai.preview.emergentagent.com/api"
 TEST_USER = {"email": "test@hostingin.com", "password": "password123"}
 
 class HostingInTester:
