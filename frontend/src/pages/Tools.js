@@ -49,6 +49,15 @@ export default function Tools() {
 
   const tools = [
     {
+      id: 'domain-checker',
+      title: 'Domain Checker',
+      description: 'Search and register domains',
+      icon: Globe,
+      color: 'from-indigo-500 to-blue-500',
+      bgColor: 'bg-indigo-100 dark:bg-indigo-900/20',
+      action: () => setDomainCheckerOpen(true)
+    },
+    {
       id: 'file-manager',
       title: 'File Manager',
       description: 'Manage your website files and folders',
