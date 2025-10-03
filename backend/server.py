@@ -909,11 +909,33 @@ async def admin_get_logs(admin: User = Depends(get_admin_user)):
 
 @api_router.get("/domain/check")
 async def check_domain(q: str):
-    available = check_domain_availability(q)
+    """Enhanced domain checker with TLD pricing"""
+    # TLD pricing in cents (Rupiah)
+    tld_pricing = {
+        ".com": 150000,
+        ".id": 300000,
+        ".co.id": 250000,
+        ".net": 145000,
+        ".org": 130000,
+        ".store": 85000,
+        ".tech": 100000,
+        ".ai": 400000
+    }
+    
+    results = []
+    for tld, price_cents in tld_pricing.items():
+        domain_with_tld = f"{q}{tld}"
+        available = check_domain_availability(domain_with_tld)
+        results.append({
+            "tld": tld,
+            "domain": domain_with_tld,
+            "price_cents": price_cents,
+            "available": available
+        })
+    
     return {
-        "domain": q,
-        "available": available,
-        "message": f"Domain {q} is {'available' if available else 'taken'}!"
+        "query": q,
+        "results": results
     }
 
 @api_router.get("/ai/help")
