@@ -29,8 +29,10 @@ export default function DashboardLayout({ children }) {
 
   const userMenuItems = [
     { icon: Home, label: 'Overview', path: '/dashboard' },
-    { icon: ShoppingCart, label: 'Orders', path: '/dashboard/orders' },
     { icon: Package, label: 'Packages', path: '/dashboard/packages' },
+    { icon: ShoppingCart, label: 'Cart', path: '/dashboard/cart' },
+    { icon: Server, label: 'My Services', path: '/dashboard/services' },
+    { icon: ShoppingCart, label: 'Orders', path: '/dashboard/orders' },
     { icon: CreditCard, label: 'Billing', path: '/dashboard/billing' },
     { icon: MessageSquare, label: 'Tickets', path: '/dashboard/tickets' },
     { icon: Wrench, label: 'Tools', path: '/dashboard/tools' },
