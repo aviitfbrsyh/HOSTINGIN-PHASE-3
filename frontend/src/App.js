@@ -227,6 +227,22 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/admin/support"
+              element={
+                <ProtectedRoute adminOnly>
+                  <AdminSupport />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/broadcast"
+              element={
+                <ProtectedRoute adminOnly>
+                  <AdminBroadcast />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />
