@@ -181,6 +181,7 @@ class Notification(Document):
     title: str
     message: str
     type: str = "system"  # system, order, billing, announcement
+    category: str = "system"  # promo, system, payment, expiry
     is_read: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
@@ -188,6 +189,51 @@ class Notification(Document):
     
     class Settings:
         name = "notifications"
+
+class SupportTicket(Document):
+    user_id: PydanticObjectId
+    subject: str
+    message: str
+    source: str = "manual"  # manual, ai_escalation
+    status: str = "open"  # open, in_progress, resolved, closed
+    priority: str = "medium"  # low, medium, high
+    assigned_to: Optional[PydanticObjectId] = None
+    replies: List[Dict[str, Any]] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    class Settings:
+        name = "support_tickets"
+
+class Referral(Document):
+    user_id: PydanticObjectId
+    code: Indexed(str, unique=True)
+    clicks: int = 0
+    signups: int = 0
+    conversions: int = 0
+    rewards_earned_cents: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    class Settings:
+        name = "referrals"
+
+class UserProfile(Document):
+    user_id: Indexed(PydanticObjectId, unique=True)
+    completion_percentage: int = 0
+    badges: List[str] = Field(default_factory=list)
+    onboarding_completed: bool = False
+    preferences: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    class Settings:
+        name = "user_profiles"
 
 # ==================== PYDANTIC SCHEMAS ====================
 
