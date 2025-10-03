@@ -1353,6 +1353,7 @@ async def get_notifications(current_user: User = Depends(get_current_user)):
             "title": n.title,
             "message": n.message,
             "type": n.type,
+            "category": n.category,
             "is_read": n.is_read,
             "created_at": n.created_at.isoformat()
         }
