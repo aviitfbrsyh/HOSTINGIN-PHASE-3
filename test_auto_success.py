@@ -7,7 +7,7 @@ import requests
 import time
 from datetime import datetime
 
-BASE_URL = "https://webcontrols-ai.preview.emergentagent.com/api"
+BASE_URL = "https://nav-restoration.preview.emergentagent.com/api"
 TEST_USER = {"email": "test@hostingin.com", "password": "password123"}
 
 def test_auto_success():
