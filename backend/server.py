@@ -1176,6 +1176,8 @@ async def get_payment_status(payment_id: str, current_user: User = Depends(get_c
     
     # Auto-update payment status based on time (simulation)
     created_at = payment.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
     now = datetime.now(timezone.utc)
     elapsed_seconds = (now - created_at).total_seconds()
     
