@@ -406,7 +406,7 @@ async def startup_event():
         document_models=[
             User, Package, Order, Payment, Ticket, 
             Announcement, Promo, Affiliate, ActivityLog, KnowledgeArticle,
-            Cart, Notification
+            Cart, Notification, SupportTicket, Referral, UserProfile
         ]
     )
     logger.info("Database initialized")
