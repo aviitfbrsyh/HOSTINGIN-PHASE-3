@@ -96,22 +96,7 @@ export default function DashboardLayout({ children }) {
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </Button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative" data-testid="notifications-btn">
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <div className="p-4 text-sm text-slate-600 dark:text-slate-400">
-                  <p>🎉 Welcome to HostingIn!</p>
-                  <p className="text-xs text-slate-500 mt-1">Just now</p>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <NotificationDropdown />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
