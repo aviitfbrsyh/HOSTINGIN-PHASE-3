@@ -24,7 +24,18 @@ export default function Tools() {
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
   const [sslDialogOpen, setSslDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [domainCheckerOpen, setDomainCheckerOpen] = useState(false);
   const [sslEnabled, setSslEnabled] = useState(true);
+  const { request } = useApi();
+
+  const handleAddToCart = async (item) => {
+    try {
+      await request('POST', '/cart/add', item);
+      toast.success(`${item.name} added to cart!`);
+    } catch (error) {
+      toast.error('Failed to add to cart');
+    }
+  };
 
   // Dummy file structure
   const files = [
