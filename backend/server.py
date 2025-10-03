@@ -1386,6 +1386,852 @@ async def mark_all_read(current_user: User = Depends(get_current_user)):
     
     return {"message": f"{len(notifications)} notifications marked as read"}
 
+
+# ==================== AI SUPPORT CHAT ROUTES ====================
+
+# AI FAQ Knowledge Base
+AI_FAQ_DATABASE = {
+    "reset password": {
+        "answer": "Untuk reset password, klik 'Forgot Password' di halaman login, masukkan email Anda, dan ikuti instruksi di email yang dikirim.",
+        "related": ["login", "email", "akun"]
+    },
+    "cara order domain": {
+        "answer": "1. Masuk ke Dashboard\n2. Cek domain di Domain Checker\n3. Tambahkan domain ke Cart\n4. Pilih hosting package (opsional)\n5. Checkout dan pilih metode pembayaran",
+        "related": ["domain", "hosting", "cart"]
+    },
+    "cara upload website": {
+        "answer": "Untuk upload website:\n1. Login ke cPanel (info ada di email aktivasi)\n2. Buka File Manager\n3. Masuk ke folder public_html\n4. Upload file website Anda\n5. Extract file zip jika perlu",
+        "related": ["cpanel", "file manager", "hosting"]
+    },
+    "cara setting dns": {
+        "answer": "Untuk setting DNS:\n1. Masuk ke Dashboard → My Services\n2. Klik domain yang ingin diatur\n3. Pilih menu DNS Management\n4. Tambahkan/edit record DNS (A, CNAME, MX, dll)\n5. Tunggu propagasi 1-24 jam",
+        "related": ["domain", "nameserver", "dns"]
+    },
+    "cara install ssl": {
+        "answer": "SSL gratis otomatis aktif untuk semua hosting. Jika belum aktif:\n1. Login ke cPanel\n2. Buka SSL/TLS Status\n3. Klik 'AutoSSL'\n4. Tunggu instalasi (5-10 menit)\nAtau hubungi support jika ada masalah.",
+        "related": ["ssl", "https", "keamanan"]
+    },
+    "cara perpanjang domain": {
+        "answer": "Untuk perpanjang domain/hosting:\n1. Masuk ke Dashboard → My Services\n2. Cari layanan yang akan expired\n3. Klik tombol 'Renew'\n4. Pilih periode perpanjangan\n5. Lakukan pembayaran",
+        "related": ["renewal", "expired", "billing"]
+    },
+    "status pembayaran": {
+        "answer": "Untuk cek status pembayaran:\n1. Masuk ke Dashboard\n2. Klik menu 'Billing & Invoices'\n3. Lihat status invoice Anda\nPembayaran diproses maksimal 1x24 jam. Jika sudah bayar tapi belum terkonfirmasi, hubungi support.",
+        "related": ["payment", "invoice", "billing"]
+    },
+    "cara transfer domain": {
+        "answer": "Untuk transfer domain ke HostingIn:\n1. Minta EPP code dari registrar lama\n2. Unlock domain di registrar lama\n3. Order Transfer Domain di Dashboard\n4. Masukkan EPP code\n5. Konfirmasi email approval\n6. Proses selesai 5-7 hari kerja",
+        "related": ["domain", "transfer", "epp"]
+    }
+}
+
+@api_router.post("/support/chat")
+async def ai_support_chat(
+    query: Dict[str, str],
+    current_user: User = Depends(get_current_user)
+):
+    """AI Support Chat - Mock FAQ with intelligent matching"""
+    user_query = query.get("message", "").lower().strip()
+    
+    if not user_query:
+        return {
+            "type": "suggestions",
+            "message": "Halo! Ada yang bisa saya bantu?",
+            "suggestions": [
+                "Cara upload website",
+                "Reset password",
+                "Cara order domain",
+                "Status pembayaran"
+            ]
+        }
+    
+    # Simple keyword matching
+    best_match = None
+    best_score = 0
+    
+    for key, data in AI_FAQ_DATABASE.items():
+        score = 0
+        keywords = key.split()
+        for keyword in keywords:
+            if keyword in user_query:
+                score += 2
+        
+        # Check related keywords
+        for related in data.get("related", []):
+            if related in user_query:
+                score += 1
+        
+        if score > best_score:
+            best_score = score
+            best_match = (key, data)
+    
+    # If good match found
+    if best_match and best_score >= 2:
+        key, data = best_match
+        return {
+            "type": "answer",
+            "message": data["answer"],
+            "related_topics": data.get("related", [])
+        }
+    
+    # If no good match - offer escalation
+    return {
+        "type": "escalation",
+        "message": "Maaf, saya belum bisa menjawab pertanyaan ini. Apakah Anda ingin saya buatkan tiket support untuk Anda? Tim support kami akan membantu dalam 1x24 jam.",
+        "can_escalate": True
+    }
+
+@api_router.post("/support/tickets")
+async def create_support_ticket(
+    ticket_data: Dict[str, str],
+    current_user: User = Depends(get_current_user)
+):
+    """Create support ticket (escalated from AI or manual)"""
+    ticket = SupportTicket(
+        user_id=current_user.id,
+        subject=ticket_data.get("subject", "Support Request"),
+        message=ticket_data.get("message", ""),
+        source=ticket_data.get("source", "manual"),
+        priority=ticket_data.get("priority", "medium")
+    )
+    await ticket.insert()
+    
+    # Create notification
+    notification = Notification(
+        user_id=current_user.id,
+        title="Support Ticket Created",
+        message=f"Tiket #{str(ticket.id)[:8]} telah dibuat. Tim support akan merespons dalam 1x24 jam.",
+        type="system",
+        category="system"
+    )
+    await notification.insert()
+    
+    return {
+        "id": str(ticket.id),
+        "subject": ticket.subject,
+        "status": ticket.status,
+        "created_at": ticket.created_at.isoformat(),
+        "message": "Tiket berhasil dibuat. Tim support akan segera membantu Anda."
+    }
+
+@api_router.get("/support/tickets")
+async def get_user_tickets(current_user: User = Depends(get_current_user)):
+    """Get user's support tickets"""
+    tickets = await SupportTicket.find(
+        SupportTicket.user_id == current_user.id
+    ).sort(-SupportTicket.created_at).to_list(50)
+    
+    return [
+        {
+            "id": str(t.id),
+            "subject": t.subject,
+            "message": t.message,
+            "status": t.status,
+            "priority": t.priority,
+            "source": t.source,
+            "replies_count": len(t.replies),
+            "created_at": t.created_at.isoformat(),
+            "updated_at": t.updated_at.isoformat()
+        }
+        for t in tickets
+    ]
+
+@api_router.get("/support/tickets/{ticket_id}")
+async def get_ticket_detail(
+    ticket_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get ticket details with replies"""
+    ticket = await SupportTicket.get(ticket_id)
+    
+    if not ticket or ticket.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    return {
+        "id": str(ticket.id),
+        "subject": ticket.subject,
+        "message": ticket.message,
+        "status": ticket.status,
+        "priority": ticket.priority,
+        "source": ticket.source,
+        "replies": ticket.replies,
+        "created_at": ticket.created_at.isoformat(),
+        "updated_at": ticket.updated_at.isoformat()
+    }
+
+# ==================== ADMIN SUPPORT ROUTES ====================
+
+@api_router.get("/admin/support/tickets")
+async def admin_get_all_tickets(
+    status: Optional[str] = None,
+    admin_user: User = Depends(get_admin_user)
+):
+    """Admin: Get all support tickets"""
+    query = {}
+    if status:
+        query[SupportTicket.status] = status
+    
+    tickets = await SupportTicket.find(query).sort(-SupportTicket.created_at).to_list()
+    
+    result = []
+    for t in tickets:
+        user = await User.get(t.user_id)
+        result.append({
+            "id": str(t.id),
+            "subject": t.subject,
+            "message": t.message[:100] + "..." if len(t.message) > 100 else t.message,
+            "status": t.status,
+            "priority": t.priority,
+            "source": t.source,
+            "user_name": user.name if user else "Unknown",
+            "user_email": user.email if user else "Unknown",
+            "replies_count": len(t.replies),
+            "created_at": t.created_at.isoformat(),
+            "updated_at": t.updated_at.isoformat()
+        })
+    
+    return result
+
+@api_router.patch("/admin/support/tickets/{ticket_id}")
+async def admin_update_ticket(
+    ticket_id: str,
+    update_data: Dict[str, Any],
+    admin_user: User = Depends(get_admin_user)
+):
+    """Admin: Update ticket status or add reply"""
+    ticket = await SupportTicket.get(ticket_id)
+    
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    # Update status
+    if "status" in update_data:
+        ticket.status = update_data["status"]
+    
+    # Add reply
+    if "reply" in update_data:
+        ticket.replies.append({
+            "admin_id": str(admin_user.id),
+            "admin_name": admin_user.name,
+            "message": update_data["reply"],
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Notify user
+        notification = Notification(
+            user_id=ticket.user_id,
+            title="Support Reply Received",
+            message=f"Admin telah membalas tiket #{str(ticket.id)[:8]}",
+            type="system",
+            category="system"
+        )
+        await notification.insert()
+    
+    ticket.updated_at = datetime.now(timezone.utc)
+    await ticket.save()
+    
+    return {"message": "Ticket updated successfully"}
+
+@api_router.get("/admin/support/stats")
+async def admin_support_stats(admin_user: User = Depends(get_admin_user)):
+    """Admin: Get support statistics"""
+    all_tickets = await SupportTicket.find().to_list()
+    
+    stats = {
+        "total": len(all_tickets),
+        "open": len([t for t in all_tickets if t.status == "open"]),
+        "in_progress": len([t for t in all_tickets if t.status == "in_progress"]),
+        "resolved": len([t for t in all_tickets if t.status == "resolved"]),
+        "closed": len([t for t in all_tickets if t.status == "closed"]),
+        "ai_escalated": len([t for t in all_tickets if t.source == "ai_escalation"]),
+        "manual": len([t for t in all_tickets if t.source == "manual"])
+    }
+    
+    return stats
+
+# ==================== NOTIFICATION ENHANCEMENT ====================
+
+@api_router.get("/notifications/unread-count")
+async def get_unread_count(current_user: User = Depends(get_current_user)):
+    """Get unread notifications count"""
+    count = await Notification.find(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False
+    ).count()
+    
+    return {"count": count}
+
+@api_router.post("/admin/notifications/broadcast")
+async def broadcast_notification(
+    data: Dict[str, Any],
+    admin_user: User = Depends(get_admin_user)
+):
+    """Admin: Broadcast notification to all users or specific group"""
+    title = data.get("title", "")
+    message = data.get("message", "")
+    category = data.get("category", "system")  # promo, system, maintenance
+    target = data.get("target", "all")  # all, active_users, etc
+    
+    # Get target users
+    if target == "all":
+        users = await User.find(User.role == "user").to_list()
+    else:
+        users = await User.find(User.role == "user").to_list()  # Simplified
+    
+    # Create notification for each user
+    notifications_created = 0
+    for user in users:
+        notification = Notification(
+            user_id=user.id,
+            title=title,
+            message=message,
+            type="announcement",
+            category=category
+        )
+        await notification.insert()
+        notifications_created += 1
+    
+    # Log activity
+    log = ActivityLog(
+        admin_user_id=admin_user.id,
+        action="broadcast_notification",
+        meta={"title": title, "users_count": notifications_created, "category": category}
+    )
+    await log.insert()
+    
+    return {
+        "message": f"Notification broadcasted to {notifications_created} users",
+        "count": notifications_created
+    }
+
+# ==================== ACTIVITY TIMELINE ROUTES ====================
+
+@api_router.get("/history/timeline")
+async def get_activity_timeline(current_user: User = Depends(get_current_user)):
+    """Get user activity timeline (orders, payments, tickets, etc)"""
+    timeline = []
+    
+    # Get orders
+    orders = await Order.find(
+        Order.user_id == current_user.id
+    ).sort(-Order.created_at).limit(50).to_list()
+    
+    for order in orders:
+        package = await Package.get(order.package_id)
+        
+        # Order created event
+        timeline.append({
+            "type": "order_created",
+            "icon": "📦",
+            "title": "Order Created",
+            "description": f"Order domain {order.domain}",
+            "meta": {
+                "domain": order.domain,
+                "package": package.title if package else "Custom",
+                "price": order.price_cents
+            },
+            "timestamp": order.created_at.isoformat()
+        })
+        
+        # Payment events
+        payments = await Payment.find(Payment.order_id == order.id).to_list()
+        for payment in payments:
+            if payment.status == "success":
+                timeline.append({
+                    "type": "payment_success",
+                    "icon": "💳",
+                    "title": "Payment Success",
+                    "description": f"Payment Rp{payment.amount_cents // 100:,} sukses",
+                    "meta": {
+                        "amount": payment.amount_cents,
+                        "method": payment.method
+                    },
+                    "timestamp": payment.created_at.isoformat()
+                })
+        
+        # Service activation
+        if order.status == "active" and order.expires_at:
+            timeline.append({
+                "type": "service_active",
+                "icon": "🌐",
+                "title": "Service Active",
+                "description": f"Domain {order.domain} active",
+                "meta": {
+                    "domain": order.domain,
+                    "expires_at": order.expires_at.isoformat()
+                },
+                "timestamp": order.created_at.isoformat()
+            })
+    
+    # Get support tickets
+    tickets = await SupportTicket.find(
+        SupportTicket.user_id == current_user.id
+    ).limit(20).to_list()
+    
+    for ticket in tickets:
+        timeline.append({
+            "type": "support_ticket",
+            "icon": "🤖",
+            "title": "Support Ticket",
+            "description": ticket.subject,
+            "meta": {
+                "status": ticket.status,
+                "replies_count": len(ticket.replies)
+            },
+            "timestamp": ticket.created_at.isoformat()
+        })
+    
+    # Sort by timestamp (newest first)
+    timeline.sort(key=lambda x: x["timestamp"], reverse=True)
+    
+    return timeline[:50]  # Return last 50 events
+
+# ==================== REFERRAL & REWARDS ROUTES ====================
+
+@api_router.get("/referral/me")
+async def get_referral_info(current_user: User = Depends(get_current_user)):
+    """Get user referral information"""
+    # Get or create referral
+    referral = await Referral.find_one(Referral.user_id == current_user.id)
+    
+    if not referral:
+        # Generate unique referral code
+        code = f"REF{str(current_user.id)[:8].upper()}"
+        referral = Referral(
+            user_id=current_user.id,
+            code=code
+        )
+        await referral.insert()
+    
+    # Simulate some data for demo
+    return {
+        "code": referral.code,
+        "link": f"https://hostingin.com/register?ref={referral.code}",
+        "stats": {
+            "clicks": referral.clicks,
+            "signups": referral.signups,
+            "conversions": referral.conversions,
+            "rewards_earned": referral.rewards_earned_cents
+        },
+        "rewards_available": [
+            {
+                "id": "1",
+                "name": "Diskon 50% Renewal",
+                "description": "Diskon 50% untuk perpanjangan hosting",
+                "cost_points": 3,
+                "available": referral.conversions >= 3
+            },
+            {
+                "id": "2",
+                "name": "1 Bulan Hosting Gratis",
+                "description": "Gratis 1 bulan hosting unlimited",
+                "cost_points": 5,
+                "available": referral.conversions >= 5
+            },
+            {
+                "id": "3",
+                "name": "Domain .com Gratis",
+                "description": "Gratis domain .com untuk 1 tahun",
+                "cost_points": 10,
+                "available": referral.conversions >= 10
+            }
+        ],
+        "leaderboard_position": random.randint(50, 500),  # Mock data
+        "next_milestone": {
+            "target": 3,
+            "current": referral.conversions,
+            "reward": "Diskon 50% Renewal"
+        }
+    }
+
+@api_router.post("/referral/simulate-click")
+async def simulate_referral_click(current_user: User = Depends(get_current_user)):
+    """Simulate referral click (for demo purposes)"""
+    referral = await Referral.find_one(Referral.user_id == current_user.id)
+    
+    if referral:
+        referral.clicks += 1
+        # Random chance to simulate signup and conversion
+        if random.random() > 0.7:  # 30% chance
+            referral.signups += 1
+            if random.random() > 0.5:  # 50% of signups convert
+                referral.conversions += 1
+                referral.rewards_earned_cents += 50000  # Rp 50k per conversion
+        
+        await referral.save()
+        
+        return {
+            "message": "Referral click simulated",
+            "stats": {
+                "clicks": referral.clicks,
+                "signups": referral.signups,
+                "conversions": referral.conversions
+            }
+        }
+    
+    return {"message": "Referral not found"}
+
+# ==================== USER PROFILE & GAMIFICATION ====================
+
+@api_router.get("/profile/completion")
+async def get_profile_completion(current_user: User = Depends(get_current_user)):
+    """Calculate profile completion percentage"""
+    profile = await UserProfile.find_one(UserProfile.user_id == current_user.id)
+    
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        await profile.insert()
+    
+    # Calculate completion
+    completion_score = 0
+    total_fields = 8
+    
+    # Check various completions
+    if current_user.name and len(current_user.name) > 3:
+        completion_score += 1
+    if current_user.email:
+        completion_score += 1
+    if current_user.settings.get("theme"):
+        completion_score += 1
+    
+    # Check if user has orders
+    orders = await Order.find(Order.user_id == current_user.id).limit(1).to_list()
+    if orders:
+        completion_score += 1
+    
+    # Check if user has active services
+    active_orders = await Order.find(
+        Order.user_id == current_user.id,
+        Order.status == "active"
+    ).limit(1).to_list()
+    if active_orders:
+        completion_score += 1
+    
+    # Check referral setup
+    referral = await Referral.find_one(Referral.user_id == current_user.id)
+    if referral:
+        completion_score += 1
+    
+    # Check if onboarding completed
+    if profile.onboarding_completed:
+        completion_score += 1
+    
+    # Check if user has interacted (tickets or support)
+    tickets = await SupportTicket.find(SupportTicket.user_id == current_user.id).limit(1).to_list()
+    if tickets:
+        completion_score += 1
+    
+    completion_percentage = int((completion_score / total_fields) * 100)
+    profile.completion_percentage = completion_percentage
+    await profile.save()
+    
+    return {
+        "completion": completion_percentage,
+        "completed_items": completion_score,
+        "total_items": total_fields,
+        "suggestions": [
+            {"text": "Complete your first order", "done": len(orders) > 0},
+            {"text": "Setup referral program", "done": referral is not None},
+            {"text": "Activate a service", "done": len(active_orders) > 0},
+            {"text": "Contact support", "done": len(tickets) > 0},
+            {"text": "Complete onboarding wizard", "done": profile.onboarding_completed}
+        ]
+    }
+
+@api_router.post("/profile/complete-onboarding")
+async def complete_onboarding(current_user: User = Depends(get_current_user)):
+    """Mark onboarding as completed"""
+    profile = await UserProfile.find_one(UserProfile.user_id == current_user.id)
+    
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+    
+    profile.onboarding_completed = True
+    profile.updated_at = datetime.now(timezone.utc)
+    await profile.save()
+    
+    # Award badge
+    if "onboarding_complete" not in profile.badges:
+        profile.badges.append("onboarding_complete")
+        await profile.save()
+    
+    return {"message": "Onboarding completed successfully"}
+
+@api_router.get("/profile/badges")
+async def get_user_badges(current_user: User = Depends(get_current_user)):
+    """Get user badges and achievements"""
+    profile = await UserProfile.find_one(UserProfile.user_id == current_user.id)
+    
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        await profile.insert()
+    
+    # Get user stats for badge calculation
+    orders = await Order.find(Order.user_id == current_user.id).to_list()
+    active_services = [o for o in orders if o.status == "active"]
+    referral = await Referral.find_one(Referral.user_id == current_user.id)
+    
+    # Define available badges
+    all_badges = [
+        {
+            "id": "onboarding_complete",
+            "name": "🎓 Welcome Aboard",
+            "description": "Completed onboarding wizard",
+            "earned": "onboarding_complete" in profile.badges
+        },
+        {
+            "id": "first_order",
+            "name": "🛒 First Order",
+            "description": "Made your first purchase",
+            "earned": len(orders) > 0
+        },
+        {
+            "id": "active_user",
+            "name": "⚡ Active User",
+            "description": "Have at least 1 active service",
+            "earned": len(active_services) > 0
+        },
+        {
+            "id": "hosting_master",
+            "name": "🏆 Hosting Master",
+            "description": "Have 3 or more active services",
+            "earned": len(active_services) >= 3
+        },
+        {
+            "id": "domain_hunter",
+            "name": "🎯 Domain Hunter",
+            "description": "Registered 5 or more domains",
+            "earned": len(orders) >= 5
+        },
+        {
+            "id": "referral_starter",
+            "name": "🤝 Referral Starter",
+            "description": "Setup referral program",
+            "earned": referral is not None
+        },
+        {
+            "id": "referral_master",
+            "name": "💎 Referral Master",
+            "description": "Get 5 successful referrals",
+            "earned": referral and referral.conversions >= 5
+        }
+    ]
+    
+    # Update profile badges
+    for badge in all_badges:
+        if badge["earned"] and badge["id"] not in profile.badges:
+            profile.badges.append(badge["id"])
+    
+    await profile.save()
+    
+    return {
+        "badges": all_badges,
+        "total_earned": len([b for b in all_badges if b["earned"]]),
+        "total_available": len(all_badges)
+    }
+
+# ==================== ADMIN ANALYTICS ENHANCEMENT ====================
+
+@api_router.get("/admin/analytics/advanced")
+async def admin_advanced_analytics(admin_user: User = Depends(get_admin_user)):
+    """Admin: Get advanced analytics including lifecycle, referrals, etc"""
+    
+    # Service lifecycle stats
+    all_orders = await Order.find().to_list()
+    lifecycle_stats = {
+        "total": len(all_orders),
+        "pending": len([o for o in all_orders if o.status == "pending"]),
+        "paid": len([o for o in all_orders if o.status == "paid"]),
+        "active": len([o for o in all_orders if o.status == "active"]),
+        "expired": len([o for o in all_orders if o.status == "expired"]),
+        "cancelled": len([o for o in all_orders if o.status == "cancelled"])
+    }
+    
+    # Payment stats
+    all_payments = await Payment.find().to_list()
+    payment_stats = {
+        "total_attempts": len(all_payments),
+        "success": len([p for p in all_payments if p.status == "success"]),
+        "pending": len([p for p in all_payments if p.status == "pending"]),
+        "failed": len([p for p in all_payments if p.status == "failed"]),
+        "success_rate": round((len([p for p in all_payments if p.status == "success"]) / len(all_payments) * 100), 2) if all_payments else 0
+    }
+    
+    # Referral stats
+    all_referrals = await Referral.find().to_list()
+    referral_stats = {
+        "total_users": len(all_referrals),
+        "total_clicks": sum(r.clicks for r in all_referrals),
+        "total_signups": sum(r.signups for r in all_referrals),
+        "total_conversions": sum(r.conversions for r in all_referrals),
+        "conversion_rate": round((sum(r.conversions for r in all_referrals) / sum(r.signups for r in all_referrals) * 100), 2) if sum(r.signups for r in all_referrals) > 0 else 0
+    }
+    
+    # Support stats
+    support_tickets = await SupportTicket.find().to_list()
+    support_stats = {
+        "total": len(support_tickets),
+        "open": len([t for t in support_tickets if t.status == "open"]),
+        "resolved": len([t for t in support_tickets if t.status == "resolved"]),
+        "ai_escalated": len([t for t in support_tickets if t.source == "ai_escalation"])
+    }
+    
+    # Revenue calculation
+    successful_payments = [p for p in all_payments if p.status == "success"]
+    total_revenue = sum(p.amount_cents for p in successful_payments)
+    
+    return {
+        "lifecycle": lifecycle_stats,
+        "payments": payment_stats,
+        "referrals": referral_stats,
+        "support": support_stats,
+        "revenue": {
+            "total_cents": total_revenue,
+            "total_idr": f"Rp {total_revenue // 100:,}",
+            "average_order_value": total_revenue // len(successful_payments) if successful_payments else 0
+        }
+    }
+
+@api_router.get("/admin/users/{user_id}/activity")
+async def admin_get_user_activity(
+    user_id: str,
+    admin_user: User = Depends(get_admin_user)
+):
+    """Admin: Get detailed user activity timeline"""
+    user = await User.get(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    activity = []
+    
+    # Orders
+    orders = await Order.find(Order.user_id == user.id).sort(-Order.created_at).to_list()
+    for order in orders:
+        activity.append({
+            "type": "order",
+            "description": f"Order {order.domain}",
+            "status": order.status,
+            "amount": order.price_cents,
+            "timestamp": order.created_at.isoformat()
+        })
+    
+    # Support tickets
+    tickets = await SupportTicket.find(SupportTicket.user_id == user.id).sort(-SupportTicket.created_at).to_list()
+    for ticket in tickets:
+        activity.append({
+            "type": "support",
+            "description": ticket.subject,
+            "status": ticket.status,
+            "timestamp": ticket.created_at.isoformat()
+        })
+    
+    # Referrals
+    referral = await Referral.find_one(Referral.user_id == user.id)
+    if referral:
+        activity.append({
+            "type": "referral",
+            "description": f"Referral program: {referral.conversions} conversions",
+            "stats": {
+                "clicks": referral.clicks,
+                "signups": referral.signups,
+                "conversions": referral.conversions
+            },
+            "timestamp": referral.created_at.isoformat()
+        })
+    
+    # Sort by timestamp
+    activity.sort(key=lambda x: x["timestamp"], reverse=True)
+    
+    return {
+        "user": {
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "created_at": user.created_at.isoformat()
+        },
+        "activity": activity
+    }
+
+@api_router.patch("/admin/users/{user_id}/suspend")
+async def admin_suspend_user(
+    user_id: str,
+    data: Dict[str, Any],
+    admin_user: User = Depends(get_admin_user)
+):
+    """Admin: Suspend or unsuspend user (simulation)"""
+    user = await User.get(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    suspend = data.get("suspend", True)
+    
+    # In a real app, you'd add a 'suspended' field to User model
+    # For now, we'll just log the action
+    log = ActivityLog(
+        admin_user_id=admin_user.id,
+        action="suspend_user" if suspend else "unsuspend_user",
+        meta={"user_id": str(user.id), "user_email": user.email}
+    )
+    await log.insert()
+    
+    # Send notification to user
+    notification = Notification(
+        user_id=user.id,
+        title="Account Status Changed",
+        message=f"Your account has been {'suspended' if suspend else 'reactivated'}. Contact support for more information.",
+        type="system",
+        category="system"
+    )
+    await notification.insert()
+    
+    return {
+        "message": f"User {'suspended' if suspend else 'unsuspended'} successfully",
+        "user_id": str(user.id)
+    }
+
+# ==================== SYSTEM SETTINGS ====================
+
+@api_router.get("/admin/settings/global")
+async def get_global_settings(admin_user: User = Depends(get_admin_user)):
+    """Admin: Get global system settings"""
+    # In a real app, store these in a Settings collection
+    # For now, return mock data
+    return {
+        "branding": {
+            "accent_color": "blue",
+            "logo_url": "/logo.png",
+            "company_name": "HostingIn"
+        },
+        "features": {
+            "referral_enabled": True,
+            "ai_support_enabled": True,
+            "maintenance_mode": False
+        },
+        "banner": {
+            "enabled": True,
+            "message": "🎉 Promo Akhir Tahun - Diskon 50% untuk semua paket hosting!",
+            "type": "promo"
+        }
+    }
+
+@api_router.patch("/admin/settings/global")
+async def update_global_settings(
+    data: Dict[str, Any],
+    admin_user: User = Depends(get_admin_user)
+):
+    """Admin: Update global system settings"""
+    # In a real app, save to database
+    # For now, just log the action
+    log = ActivityLog(
+        admin_user_id=admin_user.id,
+        action="update_global_settings",
+        meta=data
+    )
+    await log.insert()
+    
+    return {"message": "Settings updated successfully", "data": data}
+
+
 # ==================== INCLUDE ROUTER ====================
 
 app.include_router(api_router)
