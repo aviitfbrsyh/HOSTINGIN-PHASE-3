@@ -116,6 +116,38 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/dashboard/cart"
+              element={
+                <ProtectedRoute>
+                  <Cart />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/checkout"
+              element={
+                <ProtectedRoute>
+                  <Checkout />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/payment"
+              element={
+                <ProtectedRoute>
+                  <Payment />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/services"
+              element={
+                <ProtectedRoute>
+                  <MyServices />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Admin Dashboard Routes */}
             <Route
