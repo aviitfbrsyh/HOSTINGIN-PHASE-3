@@ -151,6 +151,30 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/dashboard/notifications"
+              element={
+                <ProtectedRoute>
+                  <NotificationsInbox />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/activity"
+              element={
+                <ProtectedRoute>
+                  <ActivityTimeline />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/referral"
+              element={
+                <ProtectedRoute>
+                  <ReferralRewards />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Admin Dashboard Routes */}
             <Route
